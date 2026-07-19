@@ -1,0 +1,22 @@
+{
+  "calls": {
+    "stateValues": {
+      "Ee": {
+        "ACTION": {
+          "INIT": "InitCaptcha",
+          "INITV2": "InitCaptchaV2",
+          "INITV3": "InitCaptchaV3",
+          "VERIFY": "VerifyCaptchaV2",
+          "VERIFYV3": "VerifyCaptchaV3",
+          "LOG": "UploadLog"
+        },
+        "ACTION_STATE": {
+          "SUCCESS": "success",
+          "FAIL": "fail"
+        },
+        "KEY_ID": "LTAI5tSEBwYMwVKAQGpxmvTd",
+        "KEY_SECRET": "YSKfst7GaVkXwZYvVihJsKF9r89koz"
+      }
+    }
+  }
+}

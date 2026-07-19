@@ -1,0 +1,12 @@
+const fs=require('fs');
+const [input,output]=process.argv.slice(2);
+if(!input||!output)throw new Error('usage: node expose_dynamic_runtime.cjs input.js output.js');
+const src=fs.readFileSync(input,'utf8');
+const ctor=[...src.matchAll(/t\.AliyunCaptcha=([A-Za-z_$][\w$]*)/g)].at(-1)?.[1];
+const pow=src.match(/PowVerifyString\)\{([A-Za-z_$][\w$]*)\.reset\(\)/)?.[1];
+if(!ctor||!pow)throw new Error(`dynamic anchors not found: ctor=${ctor} pow=${pow}`);
+const needle=`t=window,NodeList.prototype.forEach=Array.prototype.forEach,t.AliyunCaptcha=${ctor}`;
+if(!src.includes(needle))throw new Error('export tail not found');
+const expose=`window.__DYN_INTERNALS__={ctor:${ctor},nf:${pow},state:function(){return {}}};${needle}`;
+fs.writeFileSync(output,src.replace(needle,expose));
+console.log(JSON.stringify({input,output,ctor,pow,bytes:src.length}));

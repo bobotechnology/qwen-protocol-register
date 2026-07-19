@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Runtime outputs
+output/
+cache/
+*.json
+!package.json
+!package-lock.json
+!fixtures/*.json
+
+# Batch results
+batch_results.json
+batch_results_*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.log
