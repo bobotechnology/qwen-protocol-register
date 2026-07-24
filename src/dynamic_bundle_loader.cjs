@@ -10,8 +10,8 @@ function getWorkDir() { return process.env.PIPELINE_OUT || path.join(__dirname, 
 function getDynamicRoot() { return path.join(getWorkDir(), "dynamic"); }
 const BASE_URL = "https://g.alicdn.com/captcha-frontend/dynamicJS/";
 const FEILIN_BASE_URL = "https://g.alicdn.com/captcha-frontend/FeiLin/";
-const STATIC_PATH_RE = /^3\.28\.0\/pe\.[A-Za-z0-9._-]+$/;
-const FEILIN_PATH_RE = /^1\.4\.2\/feilin\d+\.[a-f0-9]{32,64}$/;
+const STATIC_PATH_RE = /^\d+\.\d+\.\d+\/pe\.[A-Za-z0-9._-]+$/;
+const FEILIN_PATH_RE = /^\d+\.\d+\.\d+\/feilin\d+\.[a-f0-9]{32,64}$/;
 
 async function download(url) {
   const response = await requestBuffer(url, { headers: { "user-agent": "Mozilla/5.0" } });
