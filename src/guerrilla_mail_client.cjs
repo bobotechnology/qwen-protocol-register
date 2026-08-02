@@ -57,6 +57,7 @@ class Session {
               reject(new Error('Guerrilla Mail returned invalid JSON: ' + body.slice(0, 200)));
             }
           });
+          res.on('error', reject);
         }
       );
       req.setTimeout(30000, () => req.destroy(new Error('Guerrilla Mail request timeout')));
@@ -147,13 +148,16 @@ async function waitForActivation(mailbox, options) {
   options = options || {};
   const timeoutMs = Number(options.timeoutMs || process.env.TEMP_MAIL_TIMEOUT_MS || 120000);
   const intervalMs = Number(options.intervalMs || process.env.TEMP_MAIL_POLL_MS || 5000);
+  const maxConsecutiveErrors = Number(options.maxConsecutiveErrors || 5);
   const deadline = Date.now() + timeoutMs;
   const activationHost = options.activationHost || process.env.REGISTER_ACTIVATION_HOST || '';
   const seen = new Set();
   let lastErr = null;
+  let consecutiveErrors = 0;
   while (Date.now() < deadline) {
     try {
       const items = await listMessages(mailbox);
+      consecutiveErrors = 0;  // reset on success
       for (const item of items) {
         const id = item.mail_id ?? item.id;
         if (id == null || seen.has(String(id))) continue;
@@ -166,7 +170,14 @@ async function waitForActivation(mailbox, options) {
         }
       }
     } catch (e) {
+      consecutiveErrors++;
       lastErr = e.message;
+      if (consecutiveErrors >= maxConsecutiveErrors) {
+        throw new Error(
+          `Guerrilla Mail failed ${consecutiveErrors} consecutive times (last: ${lastErr}). ` +
+          `API may be unreachable. Polling stopped after ${Math.round((Date.now() + timeoutMs - deadline) / 1000)}s.`
+        );
+      }
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

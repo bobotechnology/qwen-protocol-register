@@ -27,6 +27,7 @@ Runtime:
       --guerrilla-mail     Create disposable mailboxes and activate accounts
       --output FILE        Results file (default: batch_results.json)
       --timeout MS         Per-task timeout (default: 180000)
+      --cleanup             Remove per-worker temp directories after success
   -h, --help               Show this help`);
 }
 
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     domain: 'luckfeed.com',
     output: DEFAULT_OUTPUT,
     timeoutMs: DEFAULT_TIMEOUT_MS,
+    cleanup: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -94,6 +96,8 @@ function parseArgs(argv) {
     } else if (arg === '--timeout') {
       options.timeoutMs = positiveInteger(requireValue(argv, i, arg), arg);
       i += 1;
+    } else if (arg === '--cleanup') {
+      options.cleanup = true;
     } else {
       throw new Error(`unknown option: ${arg}`);
     }
@@ -394,6 +398,15 @@ async function main() {
     console.log(parts.join('  '));
   }
   console.log(`\nResults written to: ${options.output}`);
+  if (options.cleanup) {
+    const outputDir = path.join(__dirname, 'output');
+    try {
+      fs.rmSync(outputDir, { recursive: true, force: true });
+      console.log(`Cleaned up temp directory: ${outputDir}`);
+    } catch (cleanupError) {
+      console.error(`Cleanup failed: ${cleanupError.message}`);
+    }
+  }
   if (report.failed > 0) process.exitCode = 1;
 }
 

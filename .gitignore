@@ -3,6 +3,7 @@ node_modules/
 
 # Runtime outputs
 output/
+src/output/
 cache/
 *.json
 !package.json

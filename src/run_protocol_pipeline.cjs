@@ -88,13 +88,21 @@ async function run() {
   const imageBase = "https://static-captcha-sgp.aliyuncs.com/";
   await downloadFile(imageBase + initJson.Image, path.join(OUT, "fresh_back.png"));
   await downloadFile(imageBase + initJson.PuzzleImage, path.join(OUT, "fresh_shadow.png"));
-  const offsetText = execFileSync("python", [
+  const offsetRaw = execFileSync("python", [
     path.join(__dirname, "solve_slider.py"),
     path.join(OUT, "fresh_back.png"),
     path.join(OUT, "fresh_shadow.png"),
-  ], { encoding: "utf8" });
-  fs.writeFileSync(path.join(OUT, "fresh_offset.json"), offsetText);
-  const offset = JSON.parse(offsetText);
+  ], { encoding: "utf8", timeout: 30000 });
+  // OpenCV/libpng may emit warnings to stdout. Extract the last JSON-looking line.
+  const jsonLine = offsetRaw.split(/\r?\n/).filter(s => s.trim().startsWith('{')).pop();
+  if (!jsonLine) throw new Error(`solve_slider.py produced no JSON output. Raw stdout (${offsetRaw.length} bytes):\n${offsetRaw.slice(0, 500)}`);
+  let offset;
+  try {
+    offset = JSON.parse(jsonLine);
+  } catch (e) {
+    throw new Error(`solve_slider.py produced invalid JSON: ${e.message}\nRaw JSON line: ${jsonLine.slice(0, 300)}`);
+  }
+  fs.writeFileSync(path.join(OUT, "fresh_offset.json"), JSON.stringify(offset, null, 2));
   console.log("  sourceOffset:", offset.sourceOffset, "displayOffset:", offset.displayOffset);
   // Keep the solver's source coordinate. The SDK applies its own 296->300
   // scaling and displacement curve inside the runtime probe.

@@ -80,7 +80,8 @@ class NativeXMLHttpRequest{
   removeEventListener(type,fn){if(this[`on${type}`]===fn)this[`on${type}`]=null}
   abort(){this.aborted=true}
   send(body=null){
-    const bodyStr=String(body||'');const rec={method:this.method,url:this.url,bodyLength:body==null?0:bodyStr.length,action:new URLSearchParams(bodyStr).get('Action')||'',bodyPreview:bodyStr.substring(0,200),stack:String(new Error().stack).split('\n').slice(1,12).join('\n')};if(bodyStr.includes('Action=Log2'))require('fs').writeFileSync(path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'vm_log2_body.txt'),bodyStr);if(bodyStr.includes('Action=Log3'))require('fs').writeFileSync(path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'vm_log3_body.txt'),bodyStr);xhrCalls.push(rec);
+    // Convert body to string safely: String(Buffer) produces "<Buffer ...>" garbage.
+    let bodyStr='';if(body!=null){if(typeof body==='string')bodyStr=body;else if(Buffer.isBuffer(body))bodyStr=body.toString('utf8');else if(body instanceof Uint8Array)bodyStr=Buffer.from(body).toString('utf8');else if(typeof body==='object'&&typeof body.toString==='function')bodyStr=body.toString();else bodyStr=String(body)}const rec={method:this.method,url:this.url,bodyLength:body==null?0:bodyStr.length,action:new URLSearchParams(bodyStr).get('Action')||'',bodyPreview:bodyStr.substring(0,200),stack:String(new Error().stack).split('\n').slice(1,12).join('\n')};if(bodyStr.includes('Action=Log2'))require('fs').writeFileSync(path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'vm_log2_body.txt'),bodyStr);if(bodyStr.includes('Action=Log3'))require('fs').writeFileSync(path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'vm_log3_body.txt'),bodyStr);xhrCalls.push(rec);
     const controller=new AbortController(),timeout=this.timeout?setTimeout(()=>controller.abort(),this.timeout):null;
     requestText(this.url,{method:this.method||'GET',headers:this.headers,body:/^(GET|HEAD)$/i.test(this.method)?undefined:body,timeout:this.timeout||30000})
       .then(async res=>{if(timeout)clearTimeout(timeout);this.status=res.status;this.statusText=res.statusText;this.responseURL=res.url;this.responseHeaderMap=res.headers;this.responseHeaders=Object.entries(res.headers).map(([k,v])=>`${k}: ${v}`).join('\r\n');const text=res.text;rec.actualResponse=text;this.responseText=text;this.response=this.responseType==='json'?JSON.parse(text):text;this.readyState=4;rec.status=res.status;rec.responseLength=text.length;rec.response=text;this.onreadystatechange?.();this.onload?.({type:'load',target:this,currentTarget:this})})
@@ -311,6 +312,41 @@ const clean=(value,depth=0,seen=new WeakSet())=>{
   calls.cryptoCalls=cryptoCalls;calls.btoaCalls=btoaCalls;calls.jsonCalls=jsonCalls;calls.eventDispatches=eventDispatches;calls.eventDataOps=eventDataOps;calls.xhrCalls=xhrCalls;calls.pendingTimerCount=timerHandles.size;const out={target,error,globals:Object.keys(sandbox).sort(),inspected,calls,trace:log};
   fs.mkdirSync(path.join(__dirname,'output'),{recursive:true});
   fs.writeFileSync(path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'probe.json'),JSON.stringify(out,null,2));
+  // Persist captured FeiLin key material so decrypt_device_config can
+  // consume it automatically — no manual env vars needed.
+  // The feilinCalls array records every internal crypto operation; the 'rc'
+  // (runtime-cipher) entries carry ACCESS_SEC and the encrypted key slots.
+  try{
+    const rcCalls=(sandbox.__FEILIN_CALLS__||[]).filter(x=>x.fn==='rc'&&Array.isArray(x.args)&&x.args.length>=3);
+    if(rcCalls.length){
+      let accessSec=null; const keySlots=[];
+      for(const c of rcCalls){
+        const a1=String(c.args[1]||''),a2=String(c.args[2]||'');
+        if(a1.length===16&&!accessSec)accessSec=a1;
+      }
+      // Second pass: collect key slots that ACCESS_SEC itself decrypts.
+      // Only the first 5 slots correspond to the WEB_AES_SECRET_KEY map
+      // (REQ, RES, UPLOAD, PREID, FLAG); later rc() calls decrypt other
+      // internal data with ACCESS_SEC as well.
+      if(accessSec){
+        for(const c of rcCalls){
+          const a1=String(c.args[1]||''),a2=String(c.args[2]||'');
+          if(a1===accessSec&&a2.length>=24&&/^[A-Za-z0-9+\/=]+$/.test(a2)&&!keySlots.includes(a2)){
+            keySlots.push(a2);
+            if(keySlots.length>=5)break;
+          }
+        }
+      }
+      if(accessSec&&keySlots.length){
+        const cache={accessSec,webAesKeys:keySlots,source:'feilinCalls',count:rcCalls.length};
+        const perWorkerFile=path.join(process.env.PIPELINE_OUT||path.join(__dirname,'output'),'fresh_feilin_keys.json');
+        fs.writeFileSync(perWorkerFile,JSON.stringify(cache,null,2));
+        const sharedDir=path.join(__dirname,'output');
+        fs.mkdirSync(sharedDir,{recursive:true});
+        fs.writeFileSync(path.join(sharedDir,'_feilin_keys_cache.json'),JSON.stringify(cache,null,2));
+      }
+    }
+  }catch{}
   console.log(JSON.stringify({error,traceCount:log.length,calls:Object.keys(calls),newGlobals:Object.keys(sandbox).filter(k=>!['console','setTimeout','clearTimeout','setInterval','clearInterval','URL','URLSearchParams','TextEncoder','TextDecoder','atob','btoa','document','navigator','location','screen','Image','XMLHttpRequest','fetch','crypto','performance','MutationObserver','window','self','globalThis'].includes(k))},null,2));
   setImmediate(()=>process.exit(0));
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -24,6 +24,25 @@ function probeStatement(kind, name) {
   ).program.body[0];
 }
 
+// Build the AST for the statements that wrap rk/rM to capture key arguments.
+// The outer if(!window) guard is handled by the caller.
+function keyCaptureStatements() {
+  const code = `
+window.__FEILIN_KEYS__ = window.__FEILIN_KEYS__ || [];
+var _origRk = window.__FEILIN_INTERNALS__.rk;
+var _origRm = window.__FEILIN_INTERNALS__.rM;
+window.__FEILIN_INTERNALS__.rk = function(key, text) {
+  window.__FEILIN_KEYS__.push({fn:'rk', key: String(key), len: key.length});
+  return _origRk.call(this, key, text);
+};
+window.__FEILIN_INTERNALS__.rM = function(key, text) {
+  window.__FEILIN_KEYS__.push({fn:'rM', key: String(key), len: key.length});
+  return _origRm.call(this, key, text);
+};
+`.trim();
+  return parser.parse(code, { sourceType: 'script' }).program.body;
+}
+
 function bodyText(node) {
   const start = node.start == null ? 0 : node.start;
   const end = node.end == null ? source.length : node.end;
@@ -47,9 +66,14 @@ traverse(ast, {
     if (name === 'sw') {
       const names = ['se', 'sr', 'sw', 'sg', 'sy', 'rr', 'rL', 'rF', 'ic', 'is', 'il', 'ih', 'n2', 'rk', 'rM', 'rJ'];
       const props = names.map(x => t.objectProperty(t.stringLiteral(x), t.identifier(x)));
+      const assignInternals = t.expressionStatement(
+        t.assignmentExpression('=', t.memberExpression(t.identifier('window'), t.identifier('__FEILIN_INTERNALS__')), t.objectExpression(props))
+      );
+      // Bundle the internal exposure + key-capture wrappers in one if-block.
+      const wrapStmts = keyCaptureStatements();
       path.insertAfter(t.ifStatement(
         t.binaryExpression('!==', t.unaryExpression('typeof', t.identifier('window')), t.stringLiteral('undefined')),
-        t.expressionStatement(t.assignmentExpression('=', t.memberExpression(t.identifier('window'), t.identifier('__FEILIN_INTERNALS__')), t.objectExpression(props)))
+        t.blockStatement([assignInternals, ...wrapStmts])
       ));
       exposed++;
       matched.push({ kind: 'legacy-export', name });
