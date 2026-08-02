@@ -12,6 +12,7 @@ Pure-protocol Qwen account registration with dynamic **Alibaba Cloud Captcha 2.0
 - **High-Precision Slider Solver** — OpenCV edge-fusion algorithm (>95% accuracy) replacing template matching
 - **Batch Registration** — Concurrent multi-account registration with configurable workers
 - **Auto-Activation** — Guerrilla Mail integration for automatic email verification
+- **Self-Healing Crypto** — ACCESS_SEC and WEB_AES_KEY slots auto-extracted from FeiLin runtime, no manual env vars needed when upstream rotates keys
 - **Proxy Support** — SOCKS5/HTTP proxy chaining through local Xray or direct connections
 
 ## Architecture
@@ -32,9 +33,10 @@ Pure-protocol Qwen account registration with dynamic **Alibaba Cloud Captcha 2.0
 │  2. InitCaptchaV2       ──► Aliyun API               │
 │  3. solve_slider.py     ──► OpenCV edge detection    │
 │  4. probe_bundle.cjs    ──► VM sandbox execution     │
-│  5. VerifyCaptchaV2     ──► Aliyun API (T001)        │
-│  6. completeRegistration ──► Target site signup       │
-│  7. waitForActivation   ──► Email polling            │
+│  5. extract FeiLin keys  ──► auto-detect ACCESS_SEC   │
+│  6. VerifyCaptchaV2     ──► Aliyun API (T001)        │
+│  7. completeRegistration ──► Target site signup       │
+│  8. waitForActivation   ──► Email polling            │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +45,7 @@ Pure-protocol Qwen account registration with dynamic **Alibaba Cloud Captcha 2.0
 | Module | Purpose |
 |--------|---------|
 | `protocol_client.cjs` | Alibaba Cloud API signing (HMAC-SHA1) and request building |
-| `decrypt_device_config.cjs` | AES-ECB decryption of DeviceConfig from InitCaptchaV2 |
+| `decrypt_device_config.cjs` | AES-ECB decryption of DeviceConfig; auto-extracts keys from FeiLin runtime probe |
 | `dynamic_bundle_loader.cjs` | Download + instrument dynamicJS/FeiLin bundles at runtime |
 | `probe_bundle.cjs` | VM sandbox with full browser API stubs for captcha JS |
 | `expose_feilin_runtime.cjs` | Structural instrumentation of FeiLin crypto module |
@@ -90,6 +92,7 @@ Runtime:
       --guerrilla-mail     Auto-create disposable email + activate
       --output FILE        Results JSON path (default: batch_results.json)
       --timeout MS         Per-task timeout (default: 180000)
+      --cleanup             Remove per-worker temp directories after run
   -h, --help               Show help
 ```
 
@@ -137,6 +140,8 @@ Calls `InitCaptchaV2` to receive:
 - `CertifyId` — unique challenge identifier
 - `DeviceConfig` — AES-encrypted device fingerprint config
 - `StaticPath` — dynamicJS bundle version selector
+
+> **Key extraction is automatic.** During VM sandbox execution the FeiLin runtime's internal `rc()` cipher is traced. `ACCESS_SEC` and all five `WEB_AES_KEY` slots (REQ/RES/UPLOAD/PREID/FLAG) are captured from the first probe run and cached to `src/output/_feilin_keys_cache.json`. The built-in defaults serve as fallback only on a fresh checkout — every subsequent run uses live-extracted keys.
 
 ### 2. Dynamic Module Instrumentation
 
@@ -202,6 +207,7 @@ OpenCV-based multi-feature fusion:
 | `TEMP_MAIL_POLL_MS` | Email poll interval | `5000` |
 | `FIXTURES_DIR` | Override fixtures directory | `./fixtures` |
 | `CAPTURE_FILE` | Override capture fixture path | `fixtures/capture.jsonl` |
+| `FEILIN_KEYS_DEBUG` | Log key-loading decisions to stderr | *(none)* |
 
 ### Adding Proxy Support
 
