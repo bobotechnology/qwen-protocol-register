@@ -61,12 +61,12 @@ impl AuthFlow {
         transport: &Arc<dyn HttpTransport>,
         asig: &str,
     ) -> Result<()> {
-        let Some(info) = &self.info else {
+        if self.info.is_none() {
             if self.otp_requested() {
                 return Ok(());
             }
             bail!("OTP request did not request a verification code");
-        };
+        }
         if asig.is_empty() {
             bail!("VerifyCaptchaV2 did not return a certifyId for OTP request");
         }
@@ -77,6 +77,8 @@ impl AuthFlow {
         });
         const MAX_ATTEMPTS: u32 = 3;
         for attempt in 1..=MAX_ATTEMPTS {
+            // Re-borrow info each attempt so WAF-refresh updates take effect.
+            let info = self.info.as_ref().expect("info checked above");
             self.response = post_json(
                 transport,
                 OTP_REQUEST_URL,
@@ -91,6 +93,25 @@ impl AuthFlow {
             .await?;
             if (200..300).contains(&self.response.status) && self.otp_requested() {
                 return Ok(());
+            }
+            let response_text = self.response.text();
+            // Detect WAF HTML challenge and re-extract requestInfo for retry.
+            if response_text.trim_start().starts_with('<')
+                && let Some(new_info) = extract_waf_request_info(&response_text)?
+            {
+                if new_info.token.as_deref().unwrap_or_default().is_empty()
+                    || new_info.traceid.as_deref().unwrap_or_default().is_empty()
+                    || new_info.scene_id.as_deref().unwrap_or_default().is_empty()
+                {
+                    bail!("WAF challenge did not contain usable requestInfo");
+                }
+                // Update the WAF info so the next attempt uses fresh tokens.
+                self.info = Some(new_info);
+                // The asig from the previous captcha is still valid for this
+                // WAF session; only the u_atoken/u_aref change.
+                tracing::debug!(attempt, "WAF challenge detected, retrying with fresh requestInfo");
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                continue;
             }
             let is_rate_limited = response_data(&self.response)
                 .get("code")
