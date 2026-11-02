@@ -78,12 +78,13 @@ pub async fn run_batch(options: BatchOptions) -> Result<BatchReport> {
     let completed = Arc::new(AtomicUsize::new(0));
     let results = Arc::new(Mutex::new(vec![None; options.total]));
     let output_directories = Arc::new(Mutex::new(Vec::new()));
-    println!(
-        "Starting {} registration(s) with {} worker(s)",
-        options.total, options.workers
+    tracing::info!(
+        total = options.total,
+        workers = options.workers,
+        "starting batch registration"
     );
     if !proxies.is_empty() {
-        println!("Loaded {} proxy endpoint(s)", proxies.len());
+        tracing::info!(count = proxies.len(), "loaded proxy endpoints");
     }
     let options = Arc::new(options);
     let proxies = Arc::new(proxies);
@@ -111,13 +112,14 @@ pub async fn run_batch(options: BatchOptions) -> Result<BatchReport> {
                     .email
                     .clone()
                     .unwrap_or_else(|| format!("task-{}", index + 1));
-                println!(
-                    "[{}/{}] {} {} ({})",
-                    finished,
-                    options.total,
-                    if result.error.is_none() { "OK" } else { "FAIL" },
-                    identity,
-                    result.verify_code.as_deref().unwrap_or("N/A")
+                let status = if result.error.is_none() { "OK" } else { "FAIL" };
+                let verify = result.verify_code.as_deref().unwrap_or("N/A");
+                tracing::info!(
+                    progress = %format!("{}/{}", finished, options.total),
+                    status,
+                    email = %identity,
+                    verify,
+                    "task completed"
                 );
                 results.lock().expect("batch result lock")[index] = Some(result);
                 output_directories
@@ -153,19 +155,20 @@ pub async fn run_batch(options: BatchOptions) -> Result<BatchReport> {
     let mut bytes = serde_json::to_vec_pretty(&report)?;
     bytes.push(b'\n');
     std::fs::write(&output, bytes)?;
-    println!("\n=== Batch Results ({}) ===", report.elapsed);
-    println!("Total:     {}", report.total);
-    println!("Success:   {}", report.success);
-    println!("Failed:    {}", report.failed);
+    tracing::info!(
+        elapsed = %report.elapsed,
+        total = report.total,
+        success = report.success,
+        failed = report.failed,
+        "batch results"
+    );
     for result in &report.results {
-        println!(
-            "  [{}]  {}  pw=***  verify={}",
-            if result.error.is_none() { "OK" } else { "FAIL" },
-            result.email.as_deref().unwrap_or("(email unavailable)"),
-            result.verify_code.as_deref().unwrap_or("N/A")
-        );
+        let status = if result.error.is_none() { "OK" } else { "FAIL" };
+        let email = result.email.as_deref().unwrap_or("(email unavailable)");
+        let verify = result.verify_code.as_deref().unwrap_or("N/A");
+        tracing::info!(status, email, verify, "result detail");
     }
-    println!("\nResults written to: {}", output.display());
+    tracing::info!(path = %output.display(), "results written");
     if options.cleanup {
         for (directory, success) in output_directories.lock().expect("batch output lock").iter() {
             if *success && directory.exists() {

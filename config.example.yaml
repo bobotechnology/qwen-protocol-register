@@ -1,0 +1,37 @@
+# Qwen Protocol Register - Production Configuration
+# Copy to config.yaml and adjust as needed.
+# Environment variables override these values.
+
+registration:
+  default_workers: 2        # Concurrent workers (2 = stable, avoid OTP rate limit)
+  default_total: 1          # Default accounts per run
+  timeout_ms: 300000        # Per-task timeout (300s)
+  stagger_ms: 500           # Delay between worker starts
+  cleanup_on_success: false # Remove worker temp dirs after success
+
+network:
+  proxy: null               # e.g. "http://proxy.example.com:8080"
+  proxy_file: null          # e.g. "proxies.txt" (one per line)
+  request_timeout_secs: 60  # Per-request timeout
+  max_retries: 3            # Transport-level retries
+
+mail:
+  guerrilla_enabled: true   # Use Guerrilla Mail for OTP
+  default_domain: "luckfeed.com"
+  otp_timeout_ms: 120000    # OTP email wait timeout
+  otp_poll_ms: 5000         # OTP poll interval
+
+captcha:
+  max_attempts: 3           # Max captcha retries on F001/F008/F015
+  feilin_wait_ms: 8000      # QuickJS FeiLin wait window
+  fingerprint_randomize: true # Randomize browser fingerprint per attempt
+
+output:
+  results_file: "batch_results.json"
+  artifact_dir: "src/output"
+  save_raw_email: true      # Save raw OTP email for debugging
+
+logging:
+  level: "info"             # trace/debug/info/warn/error
+  file: null                # e.g. "logs/register.log"
+  json: false               # JSON structured logs

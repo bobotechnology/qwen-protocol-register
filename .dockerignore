@@ -1,0 +1,34 @@
+# Build artifacts
+target/
+Cargo.lock
+
+# Runtime outputs
+src/output/
+batch_results.json
+batch_results_*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs
+README.md
+LICENSE
+
+# Config (mounted at runtime)
+config.yaml
+config.example.yaml
+
+# Logs
+*.log
+logs/

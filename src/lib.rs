@@ -7,6 +7,7 @@ pub mod config;
 pub mod device;
 pub mod inspector;
 pub mod instrument;
+pub mod logging;
 pub mod mail;
 pub mod pipeline;
 pub mod protocol;

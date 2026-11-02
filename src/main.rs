@@ -1,6 +1,7 @@
 use qwen_protocol_register::batch::run_batch;
-use qwen_protocol_register::config::{parse_args, usage};
+use qwen_protocol_register::config::{AppConfig, parse_args, usage};
 use qwen_protocol_register::inspector::{inspect_capture, inspect_probe, inspect_sparse};
+use qwen_protocol_register::logging::init_logging;
 use std::path::Path;
 
 fn inspect(command: &str, path: &Path) -> Result<String, String> {
@@ -32,6 +33,14 @@ async fn run(args: &[String]) -> Result<Option<String>, String> {
     if options.help {
         return Ok(Some(usage().to_string()));
     }
+
+    // Load config from optional YAML file, then init logging
+    let config = AppConfig::load(options.config_file.as_deref())
+        .map_err(|error| error.to_string())?;
+    init_logging(&config.logging).map_err(|error| error.to_string())?;
+
+    tracing::info!(?config, "configuration loaded");
+
     let report = run_batch(options)
         .await
         .map_err(|error| error.to_string())?;

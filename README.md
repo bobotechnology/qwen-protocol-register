@@ -24,6 +24,22 @@ use an installed compatible SDK explicitly:
 SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk cargo test
 ```
 
+## Docker
+
+```bash
+# Build image
+docker build -t qwen-protocol-register .
+
+# Run with default settings
+docker run --rm qwen-protocol-register --total 5 --workers 2 --guerrilla-mail
+
+# Run with custom config and proxy
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v $(pwd)/src/output:/app/src/output \
+  qwen-protocol-register --config /app/config.yaml --total 10 --workers 2
+```
+
 ## Registration CLI
 
 ```bash
@@ -45,6 +61,7 @@ Options retain the former interface:
     --output FILE        Results JSON path (default: batch_results.json)
     --timeout MS         Per-task timeout (default: 180000)
     --cleanup            Remove successful worker artifact directories
+    --config FILE        Load YAML config file
 -h, --help               Show help
 ```
 
@@ -67,6 +84,29 @@ cargo run -- sparse fixtures/sparse_ip_plaintext.txt
 
 ## Configuration
 
+Copy `config.example.yaml` to `config.yaml` and adjust values, or use the
+`--config` flag to specify a custom path. Environment variables override
+file-based settings.
+
+```yaml
+# config.yaml
+registration:
+  default_workers: 2
+  timeout_ms: 300000
+network:
+  request_timeout_secs: 60
+  max_retries: 3
+mail:
+  otp_timeout_ms: 120000
+  otp_poll_ms: 5000
+captcha:
+  max_attempts: 3
+  fingerprint_randomize: true
+logging:
+  level: info
+  json: false
+```
+
 - `ALIYUN_KEY_ID`, `ALIYUN_KEY_SECRET`: override credentials from `fixtures/probe.json`.
 - `FIXTURES_DIR`: fixture directory, default `fixtures`.
 - `CAPTURE_FILE`: override the capture JSONL path.
@@ -77,6 +117,7 @@ cargo run -- sparse fixtures/sparse_ip_plaintext.txt
 - `SOLVER_MIN_OFFSET`, `SOLVER_CAPTURE_DIR`, `SOLVER_ANOMALY_DIR`, and
   `SOLVER_ANOMALY_THRESHOLD`: slider search and diagnostics.
 - `PROBE_REQUIRE_TELEMETRY`: require successful Log2 and Log3 responses.
+- `RUST_LOG`: log level override (trace/debug/info/warn/error).
 
 Secrets must be supplied through environment variables or local ignored files.
 Tracked fixtures and historical source may contain credential-shaped material;
